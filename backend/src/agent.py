@@ -1,20 +1,19 @@
 # ======================================================
-# 🏥 APOLLO DAILY WELLNESS VOICE COMPANION
-# 🚀 Daily Check-In • Mood • Energy • Goals • JSON History
+# 🧠 DAY 4: TEACH-THE-TUTOR (COMPUTER EDITION)
+# 🚀 Features: Computer Basics, Hardware vs Software, OS, Programming Basics
 # ======================================================
 
 import logging
 import json
 import os
 import asyncio
-from datetime import datetime, timedelta
-from typing import Annotated, Literal, List, Optional, Dict
-from dataclasses import dataclass, field, asdict
+from typing import Annotated, Literal, Optional
+from dataclasses import dataclass
 
-print("\n" + "🏥" * 50)
-print("🚀 APOLLO WELLNESS COMPANION")
+print("\n" + "💻" * 50)
+print("🚀 COMPUTER TUTOR - DAY 4 ")
 print("💡 agent.py LOADED SUCCESSFULLY!")
-print("🏥" * 50 + "\n")
+print("💻" * 50 + "\n")
 
 from dotenv import load_dotenv
 from pydantic import Field
@@ -26,12 +25,11 @@ from livekit.agents import (
     RoomInputOptions,
     WorkerOptions,
     cli,
-    metrics,
-    MetricsCollectedEvent,
-    RunContext,
     function_tool,
+    RunContext,
 )
 
+# 🔌 PLUGINS
 from livekit.plugins import murf, silero, google, deepgram, noise_cancellation
 from livekit.plugins.turn_detector.multilingual import MultilingualModel
 
@@ -39,362 +37,284 @@ logger = logging.getLogger("agent")
 load_dotenv(".env.local")
 
 # ======================================================
-# 🧠 STATE MANAGEMENT & DATA STRUCTURES
+# 📚 KNOWLEDGE BASE (COMPUTER SCIENCE / IT DATA)
 # ======================================================
 
+# 🆕 Renamed file so it generates fresh COMPUTER edition data for you
+CONTENT_FILE = "computer_content.json"
+
+# 💻 COMPUTER TUTOR QUESTIONS
+DEFAULT_CONTENT = [
+    {
+        "id": "computer_basics",
+        "title": "What is a Computer?",
+        "summary": (
+            "A computer is an electronic device that accepts data as input, "
+            "processes it using instructions (programs), and produces output. "
+            "It can store data and run different types of software to perform tasks."
+        ),
+        "sample_question": "How would you define a computer in simple words, and what are its main functions?"
+    },
+    {
+        "id": "hardware_software",
+        "title": "Hardware vs Software",
+        "summary": (
+            "Hardware refers to the physical components of a computer such as the CPU, RAM, keyboard, and monitor. "
+            "Software refers to the programs and operating systems that run on the hardware and tell it what to do."
+        ),
+        "sample_question": "What is the difference between hardware and software? Give one example of each."
+    },
+    {
+        "id": "operating_system",
+        "title": "Operating System (OS)",
+        "summary": (
+            "An Operating System is system software that manages computer hardware and software resources. "
+            "It provides a user interface, manages files, runs applications, and controls input/output devices. "
+            "Examples include Windows, macOS, Linux, and Android."
+        ),
+        "sample_question": "What is an operating system and why is it important for a computer?"
+    },
+    {
+        "id": "programming_basics",
+        "title": "Programming Basics",
+        "summary": (
+            "Programming is the process of writing instructions (code) that a computer can execute. "
+            "These instructions are written in programming languages like Python, Java, or C++. "
+            "Key ideas include variables, data types, conditions, loops, and functions."
+        ),
+        "sample_question": "What is programming, and can you name any two programming languages?"
+    }
+]
+
+
+def load_content():
+    """
+    📖 Checks if the computer-tutor JSON exists.
+    If NO: Generates it from DEFAULT_CONTENT.
+    If YES: Loads it.
+    """
+    try:
+        path = os.path.join(os.path.dirname(__file__), CONTENT_FILE)
+
+        # Check if file exists
+        if not os.path.exists(path):
+            print(f"⚠️ {CONTENT_FILE} not found. Generating computer tutor data...")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(DEFAULT_CONTENT, f, indent=4)
+            print("✅ Computer content file created successfully.")
+
+        # Read the file
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data
+
+    except Exception as e:
+        print(f"⚠️ Error managing content file: {e}")
+        return []
+
+
+# Load data immediately on startup
+COURSE_CONTENT = load_content()
+
+# ======================================================
+# 🧠 STATE MANAGEMENT
+# ======================================================
+
+
 @dataclass
-class CheckInState:
-    """🌿 Holds data for the CURRENT daily check-in"""
-    mood: str | None = None
-    energy: str | None = None
-    objectives: list[str] = field(default_factory=list)
-    advice_given: str | None = None
-    
-    def is_complete(self) -> bool:
-        """✅ Check if we have the core check-in data"""
-        return all([
-            self.mood is not None,
-            self.energy is not None,
-            len(self.objectives) > 0
-        ])
-    
-    def to_dict(self) -> dict:
-        return asdict(self)
+class TutorState:
+    """🧠 Tracks the current learning context for computer tutoring."""
+    current_topic_id: str | None = None
+    current_topic_data: dict | None = None
+    mode: Literal["learn", "quiz", "teach_back"] = "learn"
+
+    def set_topic(self, topic_id: str):
+        # Find topic in loaded content
+        topic = next((item for item in COURSE_CONTENT if item["id"] == topic_id), None)
+        if topic:
+            self.current_topic_id = topic_id
+            self.current_topic_data = topic
+            return True
+        return False
+
 
 @dataclass
 class Userdata:
-    """👤 User session data passed to the agent"""
-    current_checkin: CheckInState
-    history_summary: str  # String containing info about previous sessions
-    session_start: datetime = field(default_factory=datetime.now)
+    tutor_state: TutorState
+    agent_session: Optional[AgentSession] = None
 
 # ======================================================
-# 💾 PERSISTENCE LAYERS (JSON LOGGING)
-# ======================================================
-WELLNESS_LOG_FILE = "apollo_wellness_log.json"
-
-def get_log_path():
-    base_dir = os.path.dirname(__file__)
-    backend_dir = os.path.abspath(os.path.join(base_dir, ".."))
-    return os.path.join(backend_dir, WELLNESS_LOG_FILE)
-
-def load_history() -> list:
-    """📖 Read previous check-ins from JSON"""
-    path = get_log_path()
-    if not os.path.exists(path):
-        return []
-    try:
-        with open(path, "r", encoding='utf-8') as f:
-            data = json.load(f)
-            return data if isinstance(data, list) else []
-    except Exception as e:
-        print(f"⚠️ Could not load history: {e}")
-        return []
-
-def save_checkin_entry(entry: CheckInState) -> None:
-    """💾 Append new check-in to the JSON list"""
-    path = get_log_path()
-    history = load_history()
-    
-    # Create record
-    record = {
-        "timestamp": datetime.now().isoformat(),
-        "mood": entry.mood,
-        "energy": entry.energy,
-        "objectives": entry.objectives,
-        "summary": entry.advice_given
-    }
-    
-    history.append(record)
-    
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding='utf-8') as f:
-        json.dump(history, f, indent=4, ensure_ascii=False)
-        
-    print(f"\n✅ CHECK-IN SAVED TO {path}")
-
-# ======================================================
-# 🧮 ADVANCED GOAL 2 – WEEKLY REFLECTION HELPERS
+# 🛠️ TUTOR TOOLS
 # ======================================================
 
-def _parse_timestamp(ts: str) -> Optional[datetime]:
-    try:
-        return datetime.fromisoformat(ts)
-    except Exception:
-        return None
-
-def _filter_recent_entries(history: List[Dict], days: int = 7) -> List[Dict]:
-    if not history:
-        return []
-    now = datetime.now()
-    cutoff = now - timedelta(days=days)
-    recent: List[Dict] = []
-    for entry in history:
-        ts = entry.get("timestamp")
-        dt = _parse_timestamp(ts) if ts else None
-        if dt and dt >= cutoff:
-            recent.append(entry)
-    return recent
-
-def _summarize_recent_history(recent: List[Dict]) -> str:
-    if not recent:
-        return "I couldn't find any check-ins for the selected period."
-
-    mood_counts: Dict[str, int] = {}
-    days_with_goals = 0
-
-    for entry in recent:
-        mood = (entry.get("mood") or "").strip().lower()
-        if mood:
-            mood_counts[mood] = mood_counts.get(mood, 0) + 1
-        objectives = entry.get("objectives") or []
-        if objectives:
-            days_with_goals += 1
-
-    total_days = len(recent)
-    parts: List[str] = []
-    parts.append(f"In the last {total_days} recorded day(s), you checked in {total_days} time(s).")
-
-    if mood_counts:
-        mood_bits = [
-            f"{mood} ({count} day{'s' if count > 1 else ''})"
-            for mood, count in mood_counts.items()
-        ]
-        parts.append("Your moods have often been: " + ", ".join(mood_bits) + ".")
-
-    parts.append(
-        f"You set at least one goal on {days_with_goals} out of {total_days} day(s)."
-    )
-
-    parts.append(
-        "This isn't a judgment, just a reflection to help you notice patterns "
-        "in how you're feeling and showing up for yourself."
-    )
-    return " ".join(parts)
-
-# ======================================================
-# 🛠️ WELLNESS AGENT TOOLS – CORE
-# ======================================================
 
 @function_tool
-async def record_mood_and_energy(
+async def select_topic(
     ctx: RunContext[Userdata],
-    mood: Annotated[str, Field(description="The user's emotional state (e.g., happy, stressed, anxious)")],
-    energy: Annotated[str, Field(description="The user's energy level (e.g., high, low, drained, energetic)")],
+    topic_id: Annotated[str, Field(description="The ID of the topic to study (e.g., 'computer_basics', 'hardware_software', 'operating_system', 'programming_basics')")]
 ) -> str:
-    """📝 Record how the user is feeling. Call this after the user describes their state."""
-    ctx.userdata.current_checkin.mood = mood
-    ctx.userdata.current_checkin.energy = energy
-    
-    print(f"📊 MOOD LOGGED: {mood} | ENERGY: {energy}")
-    
-    return f"I've noted that you are feeling {mood} with {energy} energy. I'm listening."
+    """📚 Selects a computer topic to study from the available list."""
+    state = ctx.userdata.tutor_state
+    success = state.set_topic(topic_id.lower())
+
+    if success:
+        return f"Topic set to {state.current_topic_data['title']}. Ask the user if they want to 'Learn', be 'Quizzed', or 'Teach it back'."
+    else:
+        available = ", ".join([t["id"] for t in COURSE_CONTENT])
+        return f"Topic not found. Available topics are: {available}"
+
 
 @function_tool
-async def record_objectives(
+async def set_learning_mode(
     ctx: RunContext[Userdata],
-    objectives: Annotated[list[str], Field(description="List of 1-3 specific goals the user wants to achieve today")],
+    mode: Annotated[str, Field(description="The mode to switch to: 'learn', 'quiz', or 'teach_back'")]
 ) -> str:
-    """🎯 Record the user's daily goals. Call this when user states what they want to do."""
-    ctx.userdata.current_checkin.objectives = objectives
-    print(f"🎯 OBJECTIVES LOGGED: {objectives}")
-    return "I've written down your goals for the day."
+    """🔄 Switches the interaction mode and updates the agent's voice/persona."""
+
+    # 1. Update State
+    state = ctx.userdata.tutor_state
+    state.mode = mode.lower()
+
+    # 2. Switch Voice based on Mode
+    agent_session = ctx.userdata.agent_session
+
+    if agent_session and state.current_topic_data:
+        if state.mode == "learn":
+            # 👨‍🏫 MATTHEW: The Lecturer
+            agent_session.tts.update_options(voice="en-US-matthew", style="Promo")
+            instruction = f"Mode: LEARN. Explain this computer topic in simple steps: {state.current_topic_data['summary']}"
+
+        elif state.mode == "quiz":
+            # 👩‍🏫 ALICIA: The Examiner
+            agent_session.tts.update_options(voice="en-US-alicia", style="Conversational")
+            instruction = (
+                "Mode: QUIZ. Ask this question to check their understanding: "
+                f"{state.current_topic_data['sample_question']}"
+            )
+
+        elif state.mode == "teach_back":
+            # 👨‍🎓 KEN: The Student/Coach
+            agent_session.tts.update_options(voice="en-US-ken", style="Promo")
+            instruction = (
+                "Mode: TEACH_BACK. Ask the user to explain this computer topic to you as if YOU are a beginner. "
+                "Encourage them to break it into small, clear points."
+            )
+        else:
+            return "Invalid mode."
+    else:
+        instruction = "Voice switch failed (Session not found or topic not selected)."
+
+    print(f"🔄 SWITCHING MODE -> {state.mode.upper()}")
+    return f"Switched to {state.mode} mode. {instruction}"
+
 
 @function_tool
-async def complete_checkin(
+async def evaluate_teaching(
     ctx: RunContext[Userdata],
-    final_advice_summary: Annotated[str, Field(description="A brief 1-sentence summary of the advice given")],
+    user_explanation: Annotated[str, Field(description="The explanation given by the user during teach-back")]
 ) -> str:
-    """💾 Finalize the session, provide a recap, and save to JSON. Call at the very end."""
-    state = ctx.userdata.current_checkin
-    state.advice_given = final_advice_summary
-    
-    if not state.is_complete():
-        return "I can't finish yet. I still need to know your mood, energy, or at least one goal."
-
-    # Save to JSON
-    save_checkin_entry(state)
-    
-    print("\n" + "⭐" * 60)
-    print("🎉 WELLNESS CHECK-IN COMPLETED!")
-    print(f"💭 Mood: {state.mood}")
-    print(f"🎯 Goals: {state.objectives}")
-    print("⭐" * 60 + "\n")
-
-    recap = f"""
-    Here is your recap for today:
-    You are feeling {state.mood} and your energy is {state.energy}.
-    Your main goals are: {', '.join(state.objectives)}.
-    
-    Remember: {final_advice_summary}
-    
-    I've saved this in your wellness log. Have a wonderful day!
     """
-    return recap
-
-# ======================================================
-# 🛠️ ADVANCED GOAL 2 – WEEKLY REFLECTION TOOL
-# ======================================================
-
-@function_tool
-async def weekly_reflection(
-    ctx: RunContext[Userdata],
-    days: Annotated[int, Field(description="How many days back to look for the reflection, default 7")] = 7,
-) -> str:
-    """📆 Provide a simple weekly (or N-day) reflection based on JSON history."""
-    history = load_history()
-    recent = _filter_recent_entries(history, days=days)
-    summary = _summarize_recent_history(recent)
-    print("📊 WEEKLY REFLECTION GENERATED")
-    return summary
-
-# ======================================================
-# 🛠️ ADVANCED GOAL 1 & 3 – MCP STUB TOOLS (TASKS & REMINDERS)
-# ======================================================
-
-# NOTE:
-# These tools are written as *stubs* for MCP integration.
-# You can wire them to a real MCP server (Notion, Todoist, Zapier, etc.)
-# by calling the appropriate MCP client inside these functions.
-
-@function_tool
-async def create_tasks_from_objectives(
-    ctx: RunContext[Userdata],
-    backend: Annotated[str, Field(description="Which external system to use, e.g. 'notion', 'todoist', 'zapier'")],
-    objectives: Annotated[Optional[List[str]], Field(description="Optional explicit list of goals; if omitted, use current check-in objectives")] = None,
-) -> str:
-    """🗂️ Advanced Goal 1: Turn today's objectives into external tasks via MCP (stub)."""
-    tasks = objectives if objectives is not None else ctx.userdata.current_checkin.objectives
-    tasks = [t for t in tasks if t]
-    if not tasks:
-        return "I don't see any objectives to turn into tasks yet. Let's set 1–3 goals first."
-
-    # 🔗 PLACEHOLDER: here is where you'd call your MCP client.
-    # For example, call a Notion / Todoist / Zapier MCP tool with these tasks.
-    print(f"🔗 [MCP STUB] Would create tasks in {backend} for: {tasks}")
-
-    joined = "; ".join(tasks)
+    📝 Call this when the user has finished explaining a computer concept in 'teach_back' mode.
+    The LLM should:
+    - Score their explanation out of 10 for accuracy and clarity.
+    - Gently correct mistakes.
+    - Add 1–2 suggestions to improve their explanation.
+    """
+    print(f"📝 EVALUATING EXPLANATION: {user_explanation}")
     return (
-        f"I'll treat these as tasks in your {backend} workspace: {joined}. "
-        "Once your MCP server is wired up, this step can actually create or update them for you."
-    )
-
-@function_tool
-async def create_followup_reminder(
-    ctx: RunContext[Userdata],
-    reminder_text: Annotated[str, Field(description="What the reminder is about, e.g. 'go for a walk'")],
-    when: Annotated[str, Field(description="When the reminder should happen, e.g. 'today at 6 pm'")],
-    backend: Annotated[str, Field(description="Which MCP tool/integration to use, e.g. 'notion', 'todoist', 'zapier'")] = "todoist",
-) -> str:
-    """⏰ Advanced Goal 3: Create a follow-up reminder in an external MCP-connected tool (stub)."""
-    # 🔗 PLACEHOLDER for MCP reminder creation.
-    print(f"🔗 [MCP STUB] Would create reminder in {backend}: '{reminder_text}' at '{when}'")
-    return (
-        f"Okay, I would set a reminder in your {backend} system to '{reminder_text}' at '{when}'. "
-        "Once MCP is connected, this will become a real reminder instead of just a note."
+        "Analyze the user's explanation of the computer topic. "
+        "Give them a score out of 10 on accuracy and clarity, correct any mistakes, "
+        "and suggest how they can explain it even better next time."
     )
 
 # ======================================================
 # 🧠 AGENT DEFINITION
 # ======================================================
 
-class WellnessAgent(Agent):
-    def __init__(self, history_context: str):
+
+class TutorAgent(Agent):
+    def __init__(self):
+        # Generate list of topics for the prompt
+        topic_list = ", ".join([f"{t['id']} ({t['title']})" for t in COURSE_CONTENT])
+
         super().__init__(
             instructions=f"""
-            You are Apollo’s Daily Wellness Assistant. 
-            Your role is to help users maintain their wellbeing through short daily check-ins focusing on mood, energy, and simple goals. 
+            You are a **Computer Tutor** designed to help users master basic computer and programming concepts.
 
-            
-            🧠 **CONTEXT FROM PREVIOUS SESSIONS:**
-            {history_context}
-            
-            🎯 **GOALS FOR THIS SESSION:**
-            1. **Check-in:** Ask how they are feeling (Mood) and their energy levels.
-               - *Reference the history context if available (e.g., "Last time you were tired, how is today?").*
-            2. **Intentions:** Ask for 1–3 simple objectives for the day.
-            3. **Support:** Offer small, grounded, NON-MEDICAL advice.
-               - Example: "Try a 5-minute walk" or "Break that big task into small steps."
-            4. **Recap & Save:** Summarize their mood and goals, then call 'complete_checkin'.
+            💻 **AVAILABLE TOPICS:** {topic_list}
 
-            🧩 **ADVANCED BEHAVIOURS:**
-            - If the user says things like "turn these into tasks", "save this to Notion",
-              or "send these goals to Todoist", call `create_tasks_from_objectives`.
-            - If the user asks "how has my mood been this week?" or
-              "did I follow through on my goals most days?", call `weekly_reflection`.
-            - If the user mentions a future self-care activity and wants a reminder,
-              like "remind me at 6 pm to go for a walk", confirm the details and then
-              call `create_followup_reminder`.
+            🔄 **YOU HAVE 3 MODES:**
+            1. **LEARN Mode (Voice: Matthew):**
+               - You explain the selected computer topic step by step using the `summary` from the knowledge base.
+               - Use simple language and examples (like comparing hardware to body parts, OS to a manager, etc.).
+            2. **QUIZ Mode (Voice: Alicia):**
+               - You ask the user the `sample_question` and follow-up questions.
+               - Encourage them to answer in their own words.
+               - Give hints if they are stuck.
+            3. **TEACH_BACK Mode (Voice: Ken):**
+               - YOU pretend to be a beginner student.
+               - Ask the user to teach the concept to you.
+               - Listen to their explanation and then call `evaluate_teaching` to get feedback.
 
-            🚫 **SAFETY GUARDRAILS:**
-            - You are NOT a doctor or therapist.
-            - Do NOT diagnose conditions or prescribe treatments.
-            - If a user mentions self-harm or severe crisis, gently suggest professional help immediately.
+            ⚙️ **BEHAVIOR:**
+            - Start by asking what topic they want to study (mention the topic IDs you see above).
+            - When they pick a topic, use the `select_topic` tool.
+            - When they say things like:
+                - "I want to learn it" → use `set_learning_mode` with 'learn'.
+                - "Quiz me" or "Ask questions" → use `set_learning_mode` with 'quiz'.
+                - "Let me explain it" → use `set_learning_mode` with 'teach_back'.
+            - In 'teach_back' mode:
+                - Allow the user to speak for a while.
+                - Once they are done explaining, call `evaluate_teaching` with their explanation.
+                - Then give them feedback using the tool's response.
 
-            🛠️ **Use the tools to record data as the user speaks and to access history.**
+            🧩 **STYLE:**
+            - Be friendly, motivating, and beginner-friendly.
+            - Break complex words into simple explanations.
+            - Use small recaps: "So in short, ...".
             """,
-            tools=[
-                record_mood_and_energy,
-                record_objectives,
-                complete_checkin,
-                weekly_reflection,
-                create_tasks_from_objectives,
-                create_followup_reminder,
-            ],
+            tools=[select_topic, set_learning_mode, evaluate_teaching],
         )
 
 # ======================================================
-# 🎬 ENTRYPOINT & INITIALIZATION
+# 🎬 ENTRYPOINT
 # ======================================================
+
 
 def prewarm(proc: JobProcess):
     proc.userdata["vad"] = silero.VAD.load()
 
+
 async def entrypoint(ctx: JobContext):
     ctx.log_context_fields = {"room": ctx.room.name}
 
-    print("\n" + "🌿" * 25)
-    print("🚀 STARTING WELLNESS SESSION")
-    print("🏥 Apollo Wellness Assistant Active")
-    
-    # 1. Load History from JSON
-    history = load_history()
-    history_summary = "No previous history found. This is the first session."
-    
-    if history:
-        last_entry = history[-1]
-        history_summary = (
-            f"Last check-in was on {last_entry.get('timestamp', 'unknown date')}. "
-            f"User felt {last_entry.get('mood')} with {last_entry.get('energy')} energy. "
-            f"Their goals were: {', '.join(last_entry.get('objectives', []))}."
-        )
-        print("📜 HISTORY LOADED:", history_summary)
-    else:
-        print("📜 NO HISTORY FOUND.")
+    print("\n" + "💻" * 25)
+    print("🚀 STARTING COMPUTER TUTOR SESSION")
+    print(f"📚 Loaded {len(COURSE_CONTENT)} topics from Knowledge Base")
 
-    # 2. Initialize Session Data
-    userdata = Userdata(
-        current_checkin=CheckInState(),
-        history_summary=history_summary
-    )
+    # 1. Initialize State
+    userdata = Userdata(tutor_state=TutorState())
 
-    # 3. Setup Agent
+    # 2. Setup Agent
     session = AgentSession(
         stt=deepgram.STT(model="nova-3"),
         llm=google.LLM(model="gemini-2.5-flash"),
         tts=murf.TTS(
-            voice="en-US-natalie", # Using a softer, more caring voice
-            style="Promo",         # Often sounds more enthusiastic/supportive
+            voice="en-US-matthew",
+            style="Promo",
             text_pacing=True,
         ),
         turn_detection=MultilingualModel(),
         vad=ctx.proc.userdata["vad"],
         userdata=userdata,
     )
-    
+
+    # 3. Store session in userdata for tools to access
+    userdata.agent_session = session
+
     # 4. Start
     await session.start(
-        agent=WellnessAgent(history_context=history_summary),
+        agent=TutorAgent(),
         room=ctx.room,
         room_input_options=RoomInputOptions(
             noise_cancellation=noise_cancellation.BVC()
@@ -402,6 +322,7 @@ async def entrypoint(ctx: JobContext):
     )
 
     await ctx.connect()
+
 
 if __name__ == "__main__":
     cli.run_app(WorkerOptions(entrypoint_fnc=entrypoint, prewarm_fnc=prewarm))
