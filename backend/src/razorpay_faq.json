@@ -1,0 +1,18 @@
+[
+    {
+        "question": "What does Razorpay do?",
+        "answer": "Razorpay is a full-stack Indian payments platform that allows businesses to accept and process online payments via UPI, cards, netbanking, and wallets."
+    },
+    {
+        "question": "Who is Razorpay for?",
+        "answer": "Razorpay is designed for Indian startups, SMBs, SaaS companies, D2C brands, and enterprises that want to accept online payments or automate payout operations."
+    },
+    {
+        "question": "What are your charges?",
+        "answer": "Standard pricing is around 2% per successful domestic card/netbanking/wallet transaction, 0% for UPI/RuPay debit cards, and higher fees for international cards. Taxes apply."
+    },
+    {
+        "question": "How do I get started?",
+        "answer": "You can get started by signing up on the Razorpay website, completing KYC, and integrating your payment methods. Businesses typically go live within minutes."
+    }
+]
