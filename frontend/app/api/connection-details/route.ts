@@ -14,6 +14,9 @@ const API_KEY = process.env.LIVEKIT_API_KEY;
 const API_SECRET = process.env.LIVEKIT_API_SECRET;
 const LIVEKIT_URL = process.env.LIVEKIT_URL;
 
+console.log(
+  `API_KEY: ${API_KEY}\nAPI_SECRET: ${API_SECRET}\nLIVEKIT_URL: ${LIVEKIT_URL}`)
+
 // don't cache the results
 export const revalidate = 0;
 

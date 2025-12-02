@@ -68,7 +68,7 @@ export function useRoom(appConfig: AppConfig) {
     [appConfig]
   );
 
-  const startSession = useCallback(() => {
+  const startSession = useCallback(async (customToken?: string, customServerUrl?: string) => {
     setIsSessionActive(true);
 
     if (room.state === 'disconnected') {
@@ -77,11 +77,14 @@ export function useRoom(appConfig: AppConfig) {
         room.localParticipant.setMicrophoneEnabled(true, undefined, {
           preConnectBuffer: isPreConnectBufferEnabled,
         }),
-        tokenSource
-          .fetch({ agentName: appConfig.agentName })
-          .then((connectionDetails) =>
-            room.connect(connectionDetails.serverUrl, connectionDetails.participantToken)
-          ),
+        (async () => {
+          if (customToken && customServerUrl) {
+            return room.connect(customServerUrl, customToken);
+          } else {
+            const connectionDetails = await tokenSource.fetch({ agentName: appConfig.agentName });
+            return room.connect(connectionDetails.serverUrl, connectionDetails.participantToken);
+          }
+        })(),
       ]).catch((error) => {
         if (aborted.current) {
           // Once the effect has cleaned up after itself, drop any errors

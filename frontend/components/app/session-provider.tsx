@@ -25,7 +25,7 @@ interface SessionProviderProps {
 export const SessionProvider = ({ appConfig, children }: SessionProviderProps) => {
   const { room, isSessionActive, startSession, endSession } = useRoom(appConfig);
   const contextValue = useMemo(
-    () => ({ appConfig, isSessionActive, startSession, endSession }),
+    () => ({ appConfig, isSessionActive, startSession: (customToken?: string, customServerUrl?: string) => startSession(customToken, customServerUrl), endSession }),
     [appConfig, isSessionActive, startSession, endSession]
   );
 

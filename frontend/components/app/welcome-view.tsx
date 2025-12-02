@@ -1,61 +1,86 @@
-import { Button } from '@/components/livekit/button';
+import { useState } from "react";
+import { Button } from "@/components/livekit/button";
+import { Input } from "@/components/livekit/input";
+import { Mic, Theater } from "lucide-react";
 
-function WelcomeImage() {
+export default function WelcomeView({ startButtonText = "Start Improv Battle", onStartCall }: any) {
+  const [name, setName] = useState("");
+
+  const handleStart = async () => {
+    if (!name.trim()) return;
+    try {
+      const res = await fetch("/api/improv/init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const { token, serverUrl } = await res.json();
+      onStartCall(token, serverUrl);
+    } catch (error) {
+      console.error("Error fetching token:", error);
+    }
+  };
+
   return (
-    <svg
-      width="64"
-      height="64"
-      viewBox="0 0 64 64"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className="text-fg0 mb-4 size-16"
-    >
-      <path
-        d="M15 24V40C15 40.7957 14.6839 41.5587 14.1213 42.1213C13.5587 42.6839 12.7956 43 12 43C11.2044 43 10.4413 42.6839 9.87868 42.1213C9.31607 41.5587 9 40.7957 9 40V24C9 23.2044 9.31607 22.4413 9.87868 21.8787C10.4413 21.3161 11.2044 21 12 21C12.7956 21 13.5587 21.3161 14.1213 21.8787C14.6839 22.4413 15 23.2044 15 24ZM22 5C21.2044 5 20.4413 5.31607 19.8787 5.87868C19.3161 6.44129 19 7.20435 19 8V56C19 56.7957 19.3161 57.5587 19.8787 58.1213C20.4413 58.6839 21.2044 59 22 59C22.7956 59 23.5587 58.6839 24.1213 58.1213C24.6839 57.5587 25 56.7957 25 56V8C25 7.20435 24.6839 6.44129 24.1213 5.87868C23.5587 5.31607 22.7956 5 22 5ZM32 13C31.2044 13 30.4413 13.3161 29.8787 13.8787C29.3161 14.4413 29 15.2044 29 16V48C29 48.7957 29.3161 49.5587 29.8787 50.1213C30.4413 50.6839 31.2044 51 32 51C32.7956 51 33.5587 50.6839 34.1213 50.1213C34.6839 49.5587 35 48.7957 35 48V16C35 15.2044 34.6839 14.4413 34.1213 13.8787C33.5587 13.3161 32.7956 13 32 13ZM42 21C41.2043 21 40.4413 21.3161 39.8787 21.8787C39.3161 22.4413 39 23.2044 39 24V40C39 40.7957 39.3161 41.5587 39.8787 42.1213C40.4413 42.6839 41.2043 43 42 43C42.7957 43 43.5587 42.6839 44.1213 42.1213C44.6839 41.5587 45 40.7957 45 40V24C45 23.2044 44.6839 22.4413 44.1213 21.8787C43.5587 21.3161 42.7957 21 42 21ZM52 17C51.2043 17 50.4413 17.3161 49.8787 17.8787C49.3161 18.4413 49 19.2044 49 20V44C49 44.7957 49.3161 45.5587 49.8787 46.1213C50.4413 46.6839 51.2043 47 52 47C52.7957 47 53.5587 46.6839 54.1213 46.1213C54.6839 45.5587 55 44.7957 55 44V20C55 19.2044 54.6839 18.4413 54.1213 17.8787C53.5587 17.3161 52.7957 17 52 17Z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
+    <div className="bg-gradient-to-b from-black via-gray-900 to-gray-950 text-gray-200 min-h-screen overflow-y-auto py-16 px-4">
+      <div className="flex flex-col items-center mx-auto max-w-3xl">
 
-interface WelcomeViewProps {
-  startButtonText: string;
-  onStartCall: () => void;
-}
+        {/* Header */}
+        <header className="flex items-center space-x-2 mb-10">
+       
+          <span className="text-2xl font-bold text-gray-100">Improv Battle</span>
+        </header>
 
-export const WelcomeView = ({
-  startButtonText,
-  onStartCall,
-  ref,
-}: React.ComponentProps<'div'> & WelcomeViewProps) => {
-  return (
-    <div ref={ref}>
-      <section className="bg-background flex flex-col items-center justify-center text-center">
-        <WelcomeImage />
+        {/* Hero */}
+        <section className="flex flex-col items-center text-center w-full max-w-xl">
+          
+          <div className="mb-8 text-pink-400">
+            <Mic size={70} className="animate-pulse" />
+          </div>
 
-        <p className="text-foreground max-w-prose pt-1 leading-6 font-medium">
-          Chat live with your voice AI agent
-        </p>
+          <h1 className="text-5xl sm:text-6xl font-extrabold text-white mb-4 tracking-tight">
+            Step Into the Spotlight
+          </h1>
 
-        <Button variant="primary" size="lg" onClick={onStartCall} className="mt-6 w-64 font-mono">
-          {startButtonText}
-        </Button>
-      </section>
+          <p className="text-lg sm:text-xl text-gray-300 max-w-lg font-medium mb-12">
+            Your host is waiting.  
+            Each round brings a new scenario.  
+            Improv your way through the madness!
+          </p>
 
-      <div className="fixed bottom-5 left-0 flex w-full items-center justify-center">
-        <p className="text-muted-foreground max-w-prose pt-1 text-xs leading-5 font-normal text-pretty md:text-sm">
-          Need help getting set up? Check out the{' '}
-          <a
-            target="_blank"
-            rel="noopener noreferrer"
-            href="https://docs.livekit.io/agents/start/voice-ai/"
-            className="underline"
+          {/* Name input */}
+          <div className="w-full max-w-sm mb-6">
+            <input
+              type="text"
+              placeholder="Enter your name"
+              value={name}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setName(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-800/50 border border-gray-700/70 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500"
+            />
+          </div>
+
+          {/* Start Button */}
+          <Button
+            variant="primary"
+            size="lg"
+            onClick={handleStart}
+            disabled={!name.trim()}
+            className="w-full sm:w-80 font-bold text-xl py-4 bg-pink-500 hover:bg-pink-400 text-black shadow-2xl shadow-pink-500/40 hover:shadow-pink-400/70 transition-all hover:-translate-y-1 active:translate-y-0 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Voice AI quickstart
-          </a>
-          .
-        </p>
+            {startButtonText}
+          </Button>
+
+          <div className="mt-10 mb-12 text-gray-500 text-xs sm:text-sm">
+            <p>Murf Falcon TTS • Gemini • Deepgram • LiveKit Agents</p>
+          </div>
+
+        </section>
+
+        {/* Footer */}
+        <footer className="w-full py-4 text-center text-gray-600 text-xs max-w-xl px-4">
+          <p>This is a voice-first improv experience. Speak clearly when the host prompts you.</p>
+        </footer>
       </div>
     </div>
   );
-};
+}
